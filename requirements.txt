@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+yfinance
+pandas
+ta
+openai
+requests
+python-dotenv
+pillow
+mplfinance
+numpy
