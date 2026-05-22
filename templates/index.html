@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Stock Analyzer Mobile</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.19/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700&display=swap');
+        body { font-family: 'Pretendard', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .loading-overlay { background: rgba(255,255,255,0.8); backdrop-filter: blur(4px); }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen pb-10">
+
+    <!-- Header -->
+    <header class="sticky top-0 z-30 w-full bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <div class="bg-blue-600 p-2 rounded-lg text-white">
+                <i class="fa-solid fa-chart-line text-xl"></i>
+            </div>
+            <h1 class="text-xl font-bold tracking-tight text-gray-900">Stock Analyzer</h1>
+        </div>
+        <button class="btn btn-ghost btn-circle">
+            <i class="fa-solid fa-gear text-xl text-gray-500"></i>
+        </button>
+    </header>
+
+    <main class="max-w-md mx-auto p-4">
+        <!-- Search Section -->
+        <div class="card bg-white shadow-sm border border-gray-100 mb-6">
+            <div class="card-body p-4">
+                <div class="flex gap-2">
+                    <input id="tickerInput" type="text" placeholder="종목명 또는 티커 입력 (예: 애플, 삼전, NVDA)"
+                           class="input input-bordered flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           onkeyup="if(event.keyCode==13) analyzeStock()">
+                    <button onclick="analyzeStock()" class="btn btn-primary px-6">분석</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Initial State / Placeholder -->
+        <div id="welcomeScreen" class="text-center py-20">
+            <div class="text-6xl mb-4 text-gray-200"><i class="fa-solid fa-magnifying-glass"></i></div>
+            <h2 class="text-xl font-semibold text-gray-400">분석할 종목을 검색하세요</h2>
+            <p class="text-gray-400 mt-2">AI가 실시간으로 분석해 드립니다.</p>
+        </div>
+
+        <!-- Result Section (Hidden by default) -->
+        <div id="resultContent" class="hidden space-y-6">
+
+            <!-- Company Info & Signal -->
+            <div class="card bg-white shadow-sm border border-gray-100 overflow-hidden">
+                <div id="signalBanner" class="p-4 flex items-center justify-between bg-blue-600 text-white">
+                    <div>
+                        <div id="companyName" class="text-xl font-bold">Apple Inc.</div>
+                        <div id="tickerSymbol" class="text-sm opacity-80 uppercase tracking-widest">AAPL</div>
+                    </div>
+                    <div class="text-right">
+                        <div id="signalText" class="text-2xl font-black italic">STRONG BUY</div>
+                        <div id="scoreLabel" class="text-xs font-semibold opacity-90 tracking-tighter">AI SCORE: 85/100</div>
+                    </div>
+                </div>
+                <div class="p-4 grid grid-cols-2 gap-4 border-t border-gray-100">
+                    <div class="bg-gray-50 p-3 rounded-xl">
+                        <div class="text-xs text-gray-400 mb-1">RSI (14)</div>
+                        <div id="rsiValue" class="text-xl font-bold text-gray-800">45.2</div>
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded-xl">
+                        <div class="text-xs text-gray-400 mb-1">Win Probability</div>
+                        <div id="probValue" class="text-xl font-bold text-gray-800">72%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Summary Card -->
+            <div class="card bg-white shadow-sm border border-gray-100">
+                <div class="card-body p-5">
+                    <h3 class="card-title text-gray-800 text-lg mb-2">
+                        <i class="fa-solid fa-robot text-blue-500"></i> AI 심층 분석 요약
+                    </h3>
+                    <div id="aiAnalysis" class="text-gray-600 text-sm leading-relaxed whitespace-pre-wrap italic">
+                        분석 중입니다...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Style Badge -->
+            <div class="flex justify-center">
+                <div id="ruleStyle" class="badge badge-lg badge-outline border-blue-200 text-blue-700 bg-blue-50 py-4 px-6 font-semibold">
+                    성장주 / 과매도 구간
+                </div>
+            </div>
+
+            <!-- News Section -->
+            <div class="space-y-3">
+                <h3 class="font-bold text-gray-800 px-1 flex items-center gap-2">
+                    <i class="fa-solid fa-newspaper text-gray-400"></i> 관련 뉴스
+                </h3>
+                <div id="newsList" class="space-y-2">
+                    <!-- News items inserted here -->
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Loading Overlay -->
+    <div id="loading" class="hidden fixed inset-0 z-50 flex items-center justify-center loading-overlay">
+        <div class="text-center">
+            <span class="loading loading-dots loading-lg text-primary"></span>
+            <p class="text-primary font-bold mt-4 animate-pulse uppercase tracking-widest text-sm">Analyzing Market Data...</p>
+        </div>
+    </div>
+
+    <script>
+        async function analyzeStock() {
+            const query = document.getElementById('tickerInput').value.trim();
+            if (!query) return;
+
+            // Show loading
+            document.getElementById('loading').classList.remove('hidden');
+
+            try {
+                const response = await fetch(`/analyze?ticker_query=${encodeURIComponent(query)}`);
+                if (!response.ok) throw new Error('서버 분석 오류');
+
+                const data = await response.json();
+                displayResults(data);
+            } catch (err) {
+                alert('분석 중 오류가 발생했습니다: ' + err.message);
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+
+        function displayResults(data) {
+            document.getElementById('welcomeScreen').classList.add('hidden');
+            document.getElementById('resultContent').classList.remove('hidden');
+
+            // Update Header & Signal
+            document.getElementById('companyName').innerText = data.company.name || data.ticker;
+            document.getElementById('tickerSymbol').innerText = data.ticker;
+            document.getElementById('signalText').innerText = data.signal;
+            document.getElementById('scoreLabel').innerText = `AI SCORE: ${data.score}/100`;
+
+            // Signal Color
+            const banner = document.getElementById('signalBanner');
+            banner.className = 'p-4 flex items-center justify-between text-white ';
+            if (data.signal.includes('BUY')) banner.classList.add('bg-rose-500');
+            else if (data.signal.includes('SELL')) banner.classList.add('bg-blue-600');
+            else banner.classList.add('bg-emerald-600');
+
+            // Indicators
+            document.getElementById('rsiValue').innerText = data.rsi.toFixed(2);
+            document.getElementById('probValue').innerText = data.probability + '%';
+            document.getElementById('aiAnalysis').innerText = data.ai_analysis;
+            document.getElementById('ruleStyle').innerText = data.rule_style;
+
+            // News
+            const newsList = document.getElementById('newsList');
+            newsList.innerHTML = '';
+            data.news.slice(0, 5).forEach(n => {
+                const item = document.createElement('a');
+                item.href = n.url;
+                item.target = '_blank';
+                item.className = 'block p-4 bg-white border border-gray-100 rounded-xl shadow-sm active:scale-95 transition-transform';
+                item.innerHTML = `
+                    <div class="text-sm font-semibold text-gray-800 leading-snug">${n.title}</div>
+                `;
+                newsList.appendChild(item);
+            });
+
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
