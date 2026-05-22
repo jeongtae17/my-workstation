@@ -341,11 +341,7 @@ async def analyze(ticker_query: str):
         if ticker == "INVALID" or not ticker:
             return {"status": "ERROR", "error": f"'{ticker_query}'은(는) 유효하지 않거나 찾을 수 없는 종목입니다."}
 
-        # 2. 상장 폐지 여부 GPT 확인
-        if check_delisted_with_gpt(ticker_query, ticker):
-             return {"status": "ERROR", "error": f"'{ticker_query}'({ticker})은 상장 폐지된 종목으로 분석이 불가능합니다."}
-
-        # 3. 데이터 로드 및 분석
+        # 2. 실제 주가 데이터가 있는지 확인한 뒤 분석 진행
         df = fetch_stock_data(ticker)
         if df.empty:
             return {"status": "ERROR", "error": "주가 데이터를 불러오는 데 실패했습니다."}
