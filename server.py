@@ -30,6 +30,8 @@ app.add_middleware(
 
 # 종목명 -> 티커 매핑 (정확한 티커로 수정)
 KOREAN_TICKER_MAP = {
+    "코스피": "^KS11", "KOSPI": "^KS11",
+    "코스닥": "^KQ11", "KOSDAQ": "^KQ11",
     "삼성전자": "005930.KS", "삼전": "005930.KS", "삼성전자우": "005935.KS",
     "SK하이닉스": "000660.KS", "하이닉스": "000660.KS", "에스케이하이닉스": "000660.KS", "하닉": "000660.KS", "에스케이하닉": "000660.KS",
     "더존비즈온": "012510.KS", "더존": "012510.KS",
@@ -37,7 +39,7 @@ KOREAN_TICKER_MAP = {
     "카카오": "035720.KS", "네이버": "035420.KS", "NAVER": "035420.KS",
     "현대차": "005380.KS", "기아": "000270.KS",
     "에코프로": "086520.KQ", "에코프로비엠": "247540.KQ",
-    "포스코홀딩스": "005490.KS", "POSCO홀딩스": "005490.KS", "포홀": "005490.KS",
+    "포스코홀딩스": "005490.KS", "POSCO홀dings": "005490.KS", "포홀": "005490.KS",
     "엔비디아": "NVDA", "애플": "AAPL", "테슬라": "TSLA", "마이크로소프트": "MSFT",
     "구글": "GOOGL", "아마존": "AMZN", "메타": "META", "아이온큐": "IONQ",
     "한화손해보험": "000370.KS", "한화손보": "000370.KS", "HANWHA GENERAL INSURANCE": "000370.KS",
@@ -98,6 +100,9 @@ def resolve_ticker_with_gpt(user_input: str):
                         "into the exact Yahoo Finance ticker symbol string.\n\n"
                         
                         "⚠️ [CRITICAL SEARCH RULES]\n"
+                        "0. MARKET INDICES PRIORITY:\n"
+                        "   - If the user enters a major market index (e.g., 'KOSPI', 'KOSDAQ', 'S&P 500', 'Nasdaq', 'Dow Jones'), map it to its specific ticker.\n"
+                        "   - KOSPI -> '^KS11', KOSDAQ -> '^KQ11', S&P 500 -> '^GSPC', Nasdaq Composite -> '^IXIC'.\n\n"
                         "1. INTENT OVER LANGUAGE (CORE RULE):\n"
                         "   - Do NOT determine the target stock exchange based on the input language. Determine it based on the 'Primary Home Market' where the company is mainly listed and traded.\n"
                         "   - Example: If a user enters a Korean company in Japanese ('サムスン電子') or Chinese ('三星电子'), you MUST recognize it as a South Korean asset and route it to the KRX (.KS/.KQ).\n\n"

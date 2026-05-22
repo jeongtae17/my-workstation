@@ -88,19 +88,26 @@ def fetch_news(ticker, company_name=""):
     회사명과 티커를 모두 검색 쿼리에 포함하여 검색 결과의 폭을 넓힙니다.
     """
     try:
-        is_korean = ticker.endswith(".KS") or ticker.endswith(".KQ")
+        is_korean = ticker.endswith(".KS") or ticker.endswith(".KQ") or ticker == "^KS11" or ticker == "^KQ11"
 
-        # 티커에서 접미사(.KS, .KQ) 제거하여 순수 코드 또는 심볼 추출
-        clean_ticker = ticker.split('.')[0] if '.' in ticker else ticker
+        # 티커에서 접미사(.KS, .KQ) 제거하여 순수 코드 또는 심볼 추출 (인덱스는 예외)
+        if ticker.startswith('^'):
+            clean_ticker = ticker
+        else:
+            clean_ticker = ticker.split('.')[0] if '.' in ticker else ticker
 
         if is_korean:
             gn = GoogleNews(lang='ko', country='KR')
-            # 한국 주식 예: "더존비즈온 OR 012510"
-            search_query = f'"{company_name}" OR "{clean_ticker}"' if company_name else f'"{clean_ticker}"'
+            # 한국 주식/지수 예: "더존비즈온 OR 012510", "코스피 OR ^KS11"
+            if ticker == "^KS11": search_query = "코스피 지수 전망"
+            elif ticker == "^KQ11": search_query = "코스닥 지수 전망"
+            else: search_query = f'"{company_name}" OR "{clean_ticker}"' if company_name else f'"{clean_ticker}"'
         else:
             gn = GoogleNews(lang='en', country='US')
-            # 미국 주식 예: "Nvidia OR NVDA"
-            search_query = f'"{company_name}" OR "{clean_ticker}"' if company_name else f'"{clean_ticker}"'
+            # 미국 주식/지수
+            if ticker == "^GSPC": search_query = "S&P 500 index"
+            elif ticker == "^IXIC": search_query = "Nasdaq Composite index"
+            else: search_query = f'"{company_name}" OR "{clean_ticker}"' if company_name else f'"{clean_ticker}"'
 
         s = gn.search(search_query)
         entries = s.get('entries', [])
