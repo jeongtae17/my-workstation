@@ -272,7 +272,13 @@ def resolve_ticker_with_gpt(user_input: str):
                             "[FINAL SAFETY RULE]\n"
                             "========================\n"
 
-                            "If confidence is low or entity cannot be mapped reliably, return INVALID."
+                            "If confidence is low or entity cannot be mapped reliably, return INVALID.\n\n"
+
+                            "1. Prefer ACTIVE listings over delisted securities.\n"
+                            "2. Ignore historical or inactive tickers unless explicitly requested.\n"
+                            "3. If both active and delisted entities share the same name:\n"
+                            "   - prioritize the currently traded company.\n"
+                            "4. Never return obsolete Yahoo Finance symbols if an active listing exists."
                         )
                     },
                 {"role": "user", "content": f"Ticker for: {clean_input}"}
