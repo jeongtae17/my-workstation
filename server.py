@@ -28,7 +28,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 종목명 -> 티커 매핑 (정확한 티커로 수정)
+# 종목명 -> 티커 매핑 (가장 정확한 1:1 매핑 리스트)
 KOREAN_TICKER_MAP = {
     "코스피": "^KS11", "KOSPI": "^KS11",
     "코스닥": "^KQ11", "KOSDAQ": "^KQ11",
@@ -67,7 +67,7 @@ def get_ticker_by_keyword(normalized_name: str):
     """
     특정 키워드가 명시적으로 포함된 경우에만 해당 계열사로 매핑합니다.
     """
-    if "HANWHA" in normalized_name:
+    if "HANWHA" in normalized_name or "한화" in normalized_name:
         if "ENGINE" in normalized_name or "엔진" in normalized_name:
             return "082740.KS"
         if any(kw in normalized_name for kw in ["손해", "보험", "INSURANCE", "GENERAL"]):
@@ -106,25 +106,25 @@ def resolve_ticker_with_gpt(user_input: str):
                         "Your absolute priority is to convert the user's input into the exact Yahoo Finance ticker symbol string.\n\n"
                         
                         "⚠️ [CRITICAL SEARCH RULES]\n"
-                        "1. MINOR & NEWLY LISTED KOREAN STOCKS (TOP PRIORITY):\n"
-                        "   - Korean investors often look for newly listed or small-cap stocks (e.g., '인투셀', '아이엠바이오로직스').\n"
-                        "   - You MUST find their 6-digit KRX code and append '.KS' or '.KQ'.\n"
-                        "   - If you are unsure of the exact suffix, '.KQ' is more likely for bio/tech small-caps, but verify if possible.\n"
-                        "2. MARKET INDICES:\n"
+                        "1. MARKET INDICES:\n"
                         "   - KOSPI -> '^KS11', KOSDAQ -> '^KQ11', S&P 500 -> '^GSPC', Nasdaq -> '^IXIC'.\n"
-                        "3. DUAL-LISTED & GLOBAL:\n"
-                        "   - Prioritize the 'Home Market' listing. (e.g., Samsung -> KRX, Apple -> NASDAQ).\n"
-                        "4. INVALID ENTITIES:\n"
-                        "   - If the input is clearly NOT a stock (e.g., '한화이글스', '담원기아'), output 'INVALID'.\n"
+                        "2. KOREAN LISTED COMPANY:\n"
+                        "   - South Korea: Append '.KS' for KOSPI or '.KQ' for KOSDAQ.\n"
+                        "   - Priority for minor/small-cap/bio stocks: Find their 6-digit KRX code (e.g., '인투셀' -> 214610).\n"
+                        "3. GROUP AFFILIATE VS HOLDING COMPANY:\n"
+                        "   - If input is generic (e.g., 'Hanwha', 'Samsung'), prioritize the Parent/Main entity.\n"
+                        "4. INVALID & NON-STOCK ENTITIES (STRICT):\n"
+                        "   - If input is a sports team (e.g., 'Eagles', 'Hanwha Eagles', 'Damwon', 'T1'), a person, or non-stock, output 'INVALID'.\n"
                         "5. RESPONSE FORMAT:\n"
-                        "   - Output ONLY the raw ticker symbol. NO explanations, NO markdown, NO spaces.\n\n"
+                        "   - Output ONLY the raw ticker symbol. Absolutely NO explanations, NO quotes, NO markdown, NO spaces.\n\n"
 
-                        "📋 [EXAMPLES]\n"
+                        "📋 [EXACT MAPPING EXAMPLES]\n"
                         "- '더존비즈온' -> '012510.KS'\n"
                         "- '인투셀' -> '214610.KQ'\n"
-                        "- '아이엠바이오로직스' -> '462210.KQ'\n"
-                        "- '아이에스씨' -> '095340.KQ'\n"
+                        "- '아이에스씨' / 'ISC' -> '095340.KQ'\n"
                         "- '한화' -> '000880.KS'\n"
+                        "- '한화이글스' -> 'INVALID'\n"
+                        "- '담원' -> 'INVALID'\n"
                         "- '아이온큐' -> 'IONQ'"
                     )
                 },
@@ -147,7 +147,7 @@ def resolve_ticker(user_input: str):
     user_input = user_input.strip()
     normalized_input = normalize_ticker_key(user_input)
 
-    # 1. 하드코딩 맵 우선 확인
+    # 1. 하드코딩 맵 우선 확인 (KODEX 200, 하닉, 나스닥 등)
     if user_input in KOREAN_TICKER_MAP:
         return KOREAN_TICKER_MAP[user_input]
     if user_input.upper() in KOREAN_TICKER_MAP:
@@ -155,7 +155,7 @@ def resolve_ticker(user_input: str):
     if normalized_input in NORMALIZED_TICKER_MAP:
         return NORMALIZED_TICKER_MAP[normalized_input]
 
-    # 2. 보조 키워드 매칭
+    # 2. 보조 키워드 매칭 (자회사 대응)
     subsidiary_ticker = get_ticker_by_keyword(normalized_input)
     if subsidiary_ticker:
         return subsidiary_ticker
@@ -173,7 +173,7 @@ def resolve_ticker(user_input: str):
     if searched_ticker:
         return searched_ticker
 
-    # 5. 최종 실패 시 INVALID 반환 (알 수 없는 한글 등)
+    # 5. 최종 실패 시 INVALID 반환
     return "INVALID"
 
 @app.get("/", response_class=HTMLResponse)
@@ -185,13 +185,13 @@ async def read_root():
 @app.get("/analyze")
 async def analyze(ticker_query: str):
     try:
-        # 1. GPT를 통해 가공된 티커를 먼저 받아옵니다.
+        # 1. GPT를 통해 가공된 티커를 받아옵니다.
         ticker = resolve_ticker(ticker_query)
 
-        # 만약 유효하지 않은 입력으로 판정되거나 공백이면 즉시 차단
+        # 유효하지 않은 입력(스포츠팀 등) 차단
         if ticker == "INVALID" or not ticker or len(ticker) > 15:
             return {
-                "error": f"'{ticker_query}'은(는) 분석 가능한 종목으로 찾을 수 없거나 유효하지 않은 입력입니다.",
+                "error": f"'{ticker_query}'은(는) 분석 가능한 종목으로 찾을 수 없거나 유효하지 않은 입력입니다. (스포츠팀/인물명 등 제외)",
                 "status": "INVALID_INPUT"
             }
 
@@ -210,16 +210,15 @@ async def analyze(ticker_query: str):
                 "status": "EMPTY_DATA"
             }
 
-        # 3. 기존 분석 로직 진행
+        # 3. 분석 로직
         company = fetch_company_info(ticker)
         df = calculate_indicators(df)
         signal, score = generate_signal(df)
         rsi = df["RSI"].iloc[-1]
         macd = df["MACD"].iloc[-1]
 
-        # MACD 강도 비율 계산 (MACD / 현재가 * 100)
+        # MACD 강도 비율 계산
         macd_intensity = (macd / df["Close"].iloc[-1]) * 100
-
         prob = calculate_probability(score, rsi, macd, df)
         news = fetch_news(ticker, company.get("name", ""))
         financials = fetch_financials(ticker)
