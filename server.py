@@ -7,6 +7,7 @@ import uvicorn  # type: ignore
 import os
 import re
 import json
+import requests
 import yfinance as yf
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -67,12 +68,38 @@ def get_ticker_by_keyword(normalized_name: str):
     return None
 
 def search_ticker_by_name(user_input: str):
+    query = user_input.strip()
+    if not query:
+        return None
+
+    # 이미 정확한 티커 심볼을 입력한 경우 우선 검증
+    upper_query = query.upper()
+    if validate_ticker(upper_query):
+        return upper_query
+
+    # Yahoo Finance 검색 API를 활용한 보강 검색
     try:
-        search = yf.Search(user_input)
+        url = "https://query2.finance.yahoo.com/v1/finance/search"
+        params = {"q": query, "quotesCount": 20, "newsCount": 0}
+        rsp = requests.get(url, params=params, timeout=10)
+        data = rsp.json()
+        for quote in data.get("quotes", []):
+            symbol = quote.get("symbol")
+            if symbol and validate_ticker(symbol):
+                return symbol.upper()
+    except Exception:
+        pass
+
+    # yfinance 기본 검색도 보조로 유지
+    try:
+        search = yf.Search(query)
         for quote in search.quotes:
             symbol = quote.get("symbol")
-            if symbol and validate_ticker(symbol): return symbol.upper()
-    except: return None
+            if symbol and validate_ticker(symbol):
+                return symbol.upper()
+    except Exception:
+        pass
+
     return None
 
 def resolve_ticker_with_gpt(user_input: str):
