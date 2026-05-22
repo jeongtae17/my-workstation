@@ -63,19 +63,10 @@ def normalize_ticker_key(name: str) -> str:
 
 NORMALIZED_TICKER_MAP = {normalize_ticker_key(k): v for k, v in KOREAN_TICKER_MAP.items()}
 
-SUBSIDIARY_KEYWORD_MAP = {
-    "HANWHAENGINE": "082740.KS",
-    "HANWHAGENERALINSURANCE": "000370.KS",
-    "HANWHAINSURANCE": "000370.KS",
-    "HANWHA손해보험": "000370.KS"
-}
-
 def get_ticker_by_keyword(normalized_name: str):
     """
-    특정 키워드(예: ENGINE, 손해보험)가 명시적으로 포함된 경우에만 해당 계열사로 매핑합니다.
-    그렇지 않은 일반적인 '한화' 검색어는 지주사나 주요 법인으로 가도록 유도합니다.
+    특정 키워드가 명시적으로 포함된 경우에만 해당 계열사로 매핑합니다.
     """
-    # 한화 그룹 관련 정밀 분기
     if "HANWHA" in normalized_name:
         if "ENGINE" in normalized_name or "엔진" in normalized_name:
             return "082740.KS"
@@ -87,10 +78,6 @@ def get_ticker_by_keyword(normalized_name: str):
             return "009830.KS"
         if any(kw in normalized_name for kw in ["오션", "OCEAN"]):
             return "042660.KS"
-
-    for keyword, ticker in SUBSIDIARY_KEYWORD_MAP.items():
-        if keyword in normalized_name:
-            return ticker
     return None
 
 def search_ticker_by_name(user_input: str):
@@ -104,7 +91,6 @@ def search_ticker_by_name(user_input: str):
         return None
     return None
 
-
 def resolve_ticker_with_gpt(user_input: str):
     """정교화된 시스템 컨텍스트 규칙에 맞춰 한글/영문명을 야후 파이낸스 규격 티커로 매칭합니다."""
     try:
@@ -117,70 +103,27 @@ def resolve_ticker_with_gpt(user_input: str):
                     "role": "system",
                     "content": (
                         "You are an elite financial data engineer specializing in the Yahoo Finance ticker indexing system.\n"
-                        "Your absolute priority is to convert the user's input (which may be in Korean, English, Chinese, Japanese, or any abbreviation) "
-                        "into the exact Yahoo Finance ticker symbol string.\n\n"
+                        "Your absolute priority is to convert the user's input into the exact Yahoo Finance ticker symbol string.\n\n"
                         
                         "⚠️ [CRITICAL SEARCH RULES]\n"
-                        "0. MARKET INDICES PRIORITY:\n"
-                        "   - If the user enters a major market index (e.g., 'KOSPI', 'KOSDAQ', 'S&P 500', 'Nasdaq', 'Dow Jones'), map it to its specific ticker.\n"
-                        "   - KOSPI -> '^KS11', KOSDAQ -> '^KQ11', S&P 500 -> '^GSPC', Nasdaq Composite -> '^IXIC'.\n\n"
-                        "1. INTENT OVER LANGUAGE (CORE RULE):\n"
-                        "   - Do NOT determine the target stock exchange based on the input language. Determine it based on the 'Primary Home Market' where the company is mainly listed and traded.\n"
-                        "   - Example: If a user enters a Korean company in Japanese ('サムスン電子') or Chinese ('三星电子'), you MUST recognize it as a South Korean asset and route it to the KRX (.KS/.KQ).\n\n"
-                        "2. MARKET ROUTING SUMMARY:\n"
-                        "   - South Korea: Append '.KS' for KOSPI or '.KQ' for KOSDAQ. (Search KRX first if abbreviations like 'ISC' are ambiguous).\n"
-                        "   - United States: Output the raw ticker WITHOUT any suffix (e.g., 'NVDA', 'TSLA', 'AAPL', 'IONQ').\n"
-                        "   - Hong Kong: Append '.HK' (e.g., '0700.HK', '9988.HK').\n"
-                        "   - Japan (Tokyo): Append '.T' (e.g., '7203.T').\n"
-                        "   - China (Shanghai / Shenzhen): Append '.SS' or '.SZ' respectively.\n\n"
-                        "3. DUAL-LISTING & CONFLICT RESOLUTION:\n"
-                        "   - If a company is dual-listed in multiple countries (e.g., Alibaba is listed in both US as 'BABA' and HK as '9988.HK'), prioritize the Home Country / Asian primary liquidity exchange (Hong Kong for Chinese firms) unless the US market is explicitly requested.\n"
-                        "   - Special Case: Companies like Coupang ('CPNG') whose primary listing is solely in the US, output the US raw ticker.\n\n"
-                        "4. RESPONSE FORMAT:\n"
-                        "   - Output ONLY the raw ticker symbol. Absolutely NO explanations, NO quotes, NO markdown, NO spaces, NO trailing periods.\n\n"
+                        "1. MARKET INDICES:\n"
+                        "   - KOSPI -> '^KS11', KOSDAQ -> '^KQ11', S&P 500 -> '^GSPC', Nasdaq -> '^IXIC'.\n"
+                        "2. KOREAN LISTED COMPANY:\n"
+                        "   - South Korea: Append '.KS' for KOSPI or '.KQ' for KOSDAQ.\n"
+                        "3. GROUP AFFILIATE VS HOLDING COMPANY:\n"
+                        "   - If the input is generic (e.g., 'Hanwha', 'Samsung'), prioritize the Parent/Main entity.\n"
+                        "4. INVALID & NON-STOCK ENTITIES:\n"
+                        "   - If input is a sports team (e.g., 'Eagles', 'Damwon'), a person, or non-stock, output 'INVALID'.\n"
+                        "5. RESPONSE FORMAT:\n"
+                        "   - Output ONLY the raw ticker symbol. Absolutely NO explanations, NO quotes, NO markdown, NO spaces.\n\n"
 
-                        "5. GROUP AFFILIATE VS HOLDING COMPANY:\n"
-                        "   - If the user input is generic (e.g., 'Hanwha', 'Samsung', 'Hanwha Company' in any language), ALWAYS prioritize the Parent Holding Company or the main representative entity (e.g., Hanwha -> '000880.KS', Samsung -> '005930.KS').\n"
-                        "   - Only map to a specific subsidiary (e.g., Hanwha Engine, Samsung SDI) if the input EXPLICITLY mentions the subsidiary's business area (Engine, Insurance, etc.).\n"
-                        "   - Example: 'شركة هانوا' (Hanwha Company) should resolve to '000880.KS' (Hanwha Corp), NOT an affiliate.\n\n"
-
-                        "6. INVALID & NON-STOCK ENTITIES (CRITICAL):\n"
-                        "   - If the user input refers to a non-publicly traded entity, such as a sports team (e.g., 'Eagles' (Hanwha Eagles), 'Damwon', 'T1'), a personal name, or any term that is NOT a tradable stock/ETF/Index, you MUST output 'INVALID'.\n"
-                        "   - Do NOT try to find the parent company unless the user specifically asks for it (e.g., '한화' is okay, but '한화이글스' should be INVALID).\n\n"
-
-                        "📋 [EXACT MULTI-LANGUAGE MAPPING EXAMPLES]\n"
+                        "📋 [EXACT MAPPING EXAMPLES]\n"
                         "- '더존비즈온' -> '012510.KS'\n"
-                        "- '아이에스씨' -> '095340.KQ'\n"
+                        "- '아이에스씨' / 'ISC' -> '095340.KQ'\n"
                         "- '한화' -> '000880.KS'\n"
                         "- '한화이글스' -> 'INVALID'\n"
-                        "- '담원' / '담원기아' -> 'INVALID'\n"
-                        "- 'T1' -> 'INVALID'\n"
+                        "- '담원' -> 'INVALID'\n"
                         "- '아이온큐' -> 'IONQ'"
-                    )
-                },
-                {"role": "user", "content": f"Ticker for: {clean_input}"}
-            ],
-            temperature=0,
-        )
-                        "- '아이에스씨' -> '095340.KQ'\n"
-                        "- '아이온큐' -> 'IONQ'\n"
-                        "- '엔비디아' -> 'NVDA'\n"
-                        "- '삼성전자' -> '005930.KS'\n"
-                        "- '테슬라' -> 'TSLA'\n"
-                        "- '三星电子' (Korean Co. in Chinese) -> '005930.KS'\n"
-                        "- 'サムスン電子' (Korean Co. in Japanese) -> '005930.KS'\n"
-                        "- 'カカオ' (Korean Co. in Japanese) -> '035720.KS'\n"
-                        "- '腾讯' -> '0700.HK'\n"
-                        "- 'Tencent' -> '0700.HK'\n"
-                        "- '阿里巴巴' -> '9988.HK'\n"
-                        "- 'Alibaba' -> '9988.HK'\n"
-                        "- 'Toyota' -> '7203.T'\n"
-                        "- 'トヨタ' -> '7203.T'\n"
-                        "- '한화엔진' -> '082740.KS'\n"
-                        "- '한화손해보험' -> '000370.KS'\n"
-                        "- '엔비디아' -> 'NVDA'\n"
-                        "- '아이온큐' -> 'IONQ'\n"
-                        "- 'Coupang' -> 'CPNG'"
                     )
                 },
                 {"role": "user", "content": f"Ticker for: {clean_input}"}
@@ -189,7 +132,6 @@ def resolve_ticker_with_gpt(user_input: str):
         )
 
         ticker = rsp.choices[0].message.content.strip().upper()
-        # 불필요한 따옴표, 공백, 보이지 않는 문자 전처리 강화
         ticker = "".join(c for c in ticker if c.isalnum() or c in ".-").strip()
 
         if not ticker or len(ticker) > 12:
@@ -211,23 +153,26 @@ def resolve_ticker(user_input: str):
     if normalized_input in NORMALIZED_TICKER_MAP:
         return NORMALIZED_TICKER_MAP[normalized_input]
 
-    # 2. 보조 키워드 매칭으로 자회사/계열사 대응
+    # 2. 보조 키워드 매칭
     subsidiary_ticker = get_ticker_by_keyword(normalized_input)
     if subsidiary_ticker:
         return subsidiary_ticker
 
     # 3. GPT 검색 + 유효성 검증
     gpt_ticker = resolve_ticker_with_gpt(user_input)
-    if gpt_ticker and validate_ticker(gpt_ticker):
-        return gpt_ticker
+    if gpt_ticker:
+        if gpt_ticker == "INVALID":
+            return "INVALID"
+        if validate_ticker(gpt_ticker):
+            return gpt_ticker
 
-    # 4. yfinance 검색으로 추가 후보 찾기
+    # 4. yfinance 검색
     searched_ticker = search_ticker_by_name(user_input)
     if searched_ticker:
         return searched_ticker
 
-    # 5. GPT가 실패하거나 유효하지 않은 경우 마지막 수단으로 입력값 그대로 시도
-    return user_input.upper()
+    # 5. 최종 실패 시 INVALID 반환 (알 수 없는 한글 등)
+    return "INVALID"
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
@@ -244,7 +189,7 @@ async def analyze(ticker_query: str):
         # 만약 유효하지 않은 입력으로 판정되거나 공백이면 즉시 차단
         if ticker == "INVALID" or not ticker or len(ticker) > 15:
             return {
-                "error": f"'{ticker_query}'은(는) 유효하지 않은 종목명 또는 스포츠 팀 등으로 판단되어 분석할 수 없습니다.",
+                "error": f"'{ticker_query}'은(는) 분석 가능한 종목으로 찾을 수 없거나 유효하지 않은 입력입니다.",
                 "status": "INVALID_INPUT"
             }
 
@@ -252,7 +197,6 @@ async def analyze(ticker_query: str):
         try:
             df = fetch_stock_data(ticker)
         except Exception as e:
-            # 상장폐지나 오매핑 등으로 데이터가 없을 경우
             return {
                 "error": f"'{ticker}'에 대한 주가 데이터를 찾을 수 없습니다. (상장폐지 또는 오매핑)",
                 "status": "NO_DATA"
@@ -300,7 +244,6 @@ async def analyze(ticker_query: str):
             "status": "SUCCESS"
         }
     except Exception as e:
-        # 백엔드가 500 에러로 죽지 않도록 모든 예외를 캐치하여 프론트엔드에 에러 메시지 전달
         print(f"Error analyzing ticker {ticker_query}: {str(e)}")
         return {
             "error": f"데이터 처리 중 에러 발생: {str(e)}",
