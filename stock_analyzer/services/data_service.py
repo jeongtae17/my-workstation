@@ -123,7 +123,7 @@ def fetch_news(ticker, company_name=""):
             )
             seen_titles.add(title)
 
-            if len(items) >= 7: # 검색 결과 표시 개수를 약간 늘림
+            if len(items) >= 20: # AI 분석을 위해 더 많은 뉴스(20개)를 수집
                 break
                 
         return items

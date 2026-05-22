@@ -172,7 +172,8 @@
             // News
             const newsList = document.getElementById('newsList');
             newsList.innerHTML = '';
-            data.news.slice(0, 7).forEach(n => {
+            // 사용자에게는 최신/주요 뉴스 5개만 노출 (AI는 20개 전체 분석)
+            data.news.slice(0, 5).forEach(n => {
                 const item = document.createElement('a');
                 item.href = n.url;
                 item.target = '_self'; // 현재 창(WebView)에서 뉴스 열기
