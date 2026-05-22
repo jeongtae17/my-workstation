@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import uvicorn
+import uvicorn  # type: ignore
 import os
 import re
 import json
@@ -82,35 +82,199 @@ def resolve_ticker_with_gpt(user_input: str):
         rsp = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an elite financial data engineer specializing in the Yahoo Finance ticker indexing system.\n"
-                        "Your absolute priority is to convert the user's input (which may be in Korean, English, Chinese, Japanese, or any abbreviation) "
-                        "into the exact Yahoo Finance ticker symbol string.\n\n"
-                        "⚠️ [CRITICAL SEARCH RULES]\n"
-                        "0. MARKET INDICES PRIORITY:\n"
-                        "   - If the user enters a major market index (e.g., 'KOSPI', 'KOSDAQ', 'S&P 500', 'Nasdaq', 'Dow Jones'), map it to its specific ticker.\n"
-                        "   - KOSPI -> '^KS11', KOSDAQ -> '^KQ11', S&P 500 -> '^GSPC', Nasdaq Composite -> '^IXIC'.\n\n"
-                        "1. INTENT OVER LANGUAGE (CORE RULE):\n"
-                        "   - Do NOT determine the target stock exchange based on the input language. Determine it based on the 'Primary Home Market' where the company is mainly listed and traded.\n"
-                        "2. MARKET ROUTING SUMMARY:\n"
-                        "   - South Korea: Append '.KS' for KOSPI or '.KQ' for KOSDAQ.\n"
-                        "   - United States: Output the raw ticker WITHOUT any suffix (e.g., 'NVDA', 'TSLA', 'AAPL', 'IONQ').\n"
-                        "3. DUAL-LISTING & CONFLICT RESOLUTION:\n"
-                        "   - Prioritize Home Country exchange unless US is requested.\n"
-                        "4. RESPONSE FORMAT:\n"
-                        "   - Output ONLY the raw ticker symbol. No explanations.\n"
-                        "5. INVALID ENTITIES:\n"
-                        "   - If input is a sports team (Eagles, Damwon), person, or non-stock, output 'INVALID'.\n\n"
-                        "📋 [EXAMPLES]\n"
-                        "- '더존비즈온' -> '012510.KS'\n"
-                        "- 'ISC' -> '095340.KQ'\n"
-                        "- '한화' -> '000880.KS'\n"
-                        "- '한화이글스' -> 'INVALID'\n"
-                        "- '아이온큐' -> 'IONQ'"
-                    )
-                },
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are an elite Yahoo Finance ticker normalization engine.\n\n"
+
+                            "Your ONLY responsibility is converting arbitrary user input into the exact Yahoo Finance ticker symbol.\n\n"
+
+                            "You MUST return ONLY the ticker symbol string.\n"
+                            "No explanations.\n"
+                            "No markdown.\n"
+                            "No labels.\n"
+                            "No JSON.\n"
+                            "No punctuation outside the ticker.\n"
+                            "No whitespace before or after output.\n\n"
+
+                            "========================\n"
+                            "[PRIMARY OBJECTIVE]\n"
+                            "========================\n"
+
+                            "Resolve the intended financial instrument as accurately as possible.\n"
+                            "Prioritize real-world market conventions over literal text matching.\n\n"
+
+                            "========================\n"
+                            "[CORE RESOLUTION RULES]\n"
+                            "========================\n"
+
+                            "1. Resolve by PRIMARY HOME MARKET.\n"
+                            "   - Ignore the language of the query.\n"
+                            "   - Ignore the nationality of the user.\n"
+                            "   - Ignore keyboard layout differences.\n"
+                            "   - Determine where the company is mainly listed and traded.\n\n"
+
+                            "2. MARKET SUFFIX RULES:\n"
+                            "   - United States -> raw ticker only\n"
+                            "   - Korea KOSPI -> .KS\n"
+                            "   - Korea KOSDAQ -> .KQ\n"
+                            "   - Japan -> .T\n"
+                            "   - Hong Kong -> .HK\n"
+                            "   - Shanghai -> .SS\n"
+                            "   - Shenzhen -> .SZ\n"
+                            "   - Taiwan -> .TW\n"
+                            "   - London -> .L\n"
+                            "   - Toronto -> .TO\n"
+                            "   - Euronext Paris -> .PA\n"
+                            "   - Frankfurt/Xetra -> .DE\n"
+                            "   - Australia ASX -> .AX\n\n"
+
+                            "3. DUAL-LISTING RULE:\n"
+                            "   - Always prioritize the home-country listing.\n"
+                            "   - Use ADR/US listing ONLY if explicitly requested.\n"
+                            "   - If user says 'US', 'ADR', or 'NASDAQ/NYSE', prefer US ticker.\n\n"
+
+                            "Examples:\n"
+                            "   - Alibaba -> 9988.HK\n"
+                            "   - Alibaba US -> BABA\n"
+                            "   - Sony -> 6758.T\n"
+                            "   - Sony ADR -> SONY\n"
+                            "   - TSMC -> 2330.TW\n"
+                            "   - TSMC NYSE -> TSM\n"
+                            "   - Samsung Electronics -> 005930.KS\n\n"
+
+                            "========================\n"
+                            "[MARKET INDEX PRIORITY]\n"
+                            "========================\n"
+
+                            "Map major indices EXACTLY:\n"
+                            "   - KOSPI -> ^KS11\n"
+                            "   - KOSDAQ -> ^KQ11\n"
+                            "   - S&P 500 -> ^GSPC\n"
+                            "   - SP500 -> ^GSPC\n"
+                            "   - Nasdaq -> ^IXIC\n"
+                            "   - Nasdaq Composite -> ^IXIC\n"
+                            "   - Nasdaq 100 -> ^NDX\n"
+                            "   - Dow Jones -> ^DJI\n"
+                            "   - Russell 2000 -> ^RUT\n"
+                            "   - Nikkei -> ^N225\n"
+                            "   - Nikkei 225 -> ^N225\n"
+                            "   - Hang Seng -> ^HSI\n"
+                            "   - DAX -> ^GDAXI\n"
+                            "   - FTSE 100 -> ^FTSE\n"
+                            "   - CAC 40 -> ^FCHI\n\n"
+
+                            "========================\n"
+                            "[ENTITY MATCHING LOGIC]\n"
+                            "========================\n"
+
+                            "1. Accept multilingual company names.\n"
+                            "2. Accept abbreviations and aliases.\n"
+                            "3. Accept informal retail-investor nicknames.\n"
+                            "4. Accept common misspellings if intent is obvious.\n"
+                            "5. Accept partial names when uniquely identifiable.\n"
+                            "6. Prefer operating companies over ETFs.\n"
+                            "7. Prefer listed parent company over subsidiaries unless explicitly specified.\n"
+                            "8. If multiple companies share the same name, choose the globally dominant listed entity.\n\n"
+
+                            "Examples:\n"
+                            "   - Apple -> AAPL\n"
+                            "   - 애플 -> AAPL\n"
+                            "   - 엔비디아 -> NVDA\n"
+                            "   - Nvidia -> NVDA\n"
+                            "   - 아이온큐 -> IONQ\n"
+                            "   - 테슬라 -> TSLA\n"
+                            "   - 삼성전자 -> 005930.KS\n"
+                            "   - 삼전 -> 005930.KS\n"
+                            "   - 카카오 -> 035720.KS\n"
+                            "   - 네이버 -> 035420.KS\n"
+                            "   - 쿠팡 -> CPNG\n\n"
+
+                            "========================\n"
+                            "[SPECIAL SECURITY TYPES]\n"
+                            "========================\n"
+
+                            "Handle these correctly:\n"
+                            "   - ETFs\n"
+                            "   - REITs\n"
+                            "   - Preferred shares\n"
+                            "   - ADRs\n"
+                            "   - Leveraged ETFs\n"
+                            "   - Inverse ETFs\n"
+                            "   - Closed-end funds\n\n"
+
+                            "Examples:\n"
+                            "   - QQQ -> QQQ\n"
+                            "   - SOXL -> SOXL\n"
+                            "   - TQQQ -> TQQQ\n"
+                            "   - 삼성전자우 -> 005935.KS\n\n"
+
+                            "========================\n"
+                            "[AMBIGUITY RESOLUTION]\n"
+                            "========================\n"
+
+                            "If input is ambiguous:\n"
+                            "1. Prefer the most liquid and globally recognized ticker.\n"
+                            "2. Prefer active listings over delisted companies.\n"
+                            "3. Prefer common equity over bonds or derivatives.\n"
+                            "4. Prefer companies over funds when ambiguity exists.\n\n"
+
+                            "========================\n"
+                            "[INVALID ENTITY RULES]\n"
+                            "========================\n"
+
+                            "Return INVALID for:\n"
+                            "   - Sports teams\n"
+                            "   - Esports teams\n"
+                            "   - Celebrities\n"
+                            "   - Politicians\n"
+                            "   - Fictional characters\n"
+                            "   - Generic nouns\n"
+                            "   - Countries\n"
+                            "   - Religions\n"
+                            "   - Non-financial concepts\n"
+                            "   - Private companies without public ticker\n"
+                            "   - Undefined entities\n\n"
+
+                            "Examples:\n"
+                            "   - Hanwha Eagles -> INVALID\n"
+                            "   - T1 Faker -> INVALID\n"
+                            "   - Elon Musk -> INVALID\n"
+                            "   - Naruto -> INVALID\n"
+                            "   - Bitcoin mining -> INVALID\n\n"
+
+                            "========================\n"
+                            "[STRICT OUTPUT POLICY]\n"
+                            "========================\n"
+
+                            "Return EXACTLY ONE STRING.\n"
+                            "No quotes.\n"
+                            "No code block.\n"
+                            "No newline.\n"
+                            "No commentary.\n\n"
+
+                            "VALID OUTPUTS:\n"
+                            "AAPL\n"
+                            "005930.KS\n"
+                            "^GSPC\n"
+                            "9988.HK\n"
+                            "TSM\n"
+                            "INVALID\n\n"
+
+                            "INVALID OUTPUTS:\n"
+                            "Ticker: AAPL\n"
+                            "`AAPL`\n"
+                            "{\"ticker\":\"AAPL\"}\n"
+                            "The ticker is AAPL\n"
+                            "AAPL stock\n\n"
+
+                            "========================\n"
+                            "[FINAL SAFETY RULE]\n"
+                            "========================\n"
+
+                            "If confidence is low or entity cannot be mapped reliably, return INVALID."
+                        )
+                    },
                 {"role": "user", "content": f"Ticker for: {clean_input}"}
             ],
             temperature=0,

@@ -53,15 +53,22 @@ def fetch_financials(ticker):
         # 최근 3~4년 데이터 추출
         financials = []
         if income_stmt is not None and not income_stmt.empty:
+            import numpy as np # NaN 처리를 위해 추가
             cols = income_stmt.columns[:4] # 최근 4년치
             for col in cols:
                 date_str = str(col.date())
-                revenue = income_stmt.loc["Total Revenue", col] if "Total Revenue" in income_stmt.index else 0
-                op_income = income_stmt.loc["Operating Income", col] if "Operating Income" in income_stmt.index else 0
+
+                # 데이터가 없거나 NaN인 경우 0으로 처리하여 JSON 에러 방지
+                raw_revenue = income_stmt.loc["Total Revenue", col] if "Total Revenue" in income_stmt.index else 0
+                raw_op_income = income_stmt.loc["Operating Income", col] if "Operating Income" in income_stmt.index else 0
+
+                revenue = 0 if (raw_revenue is None or (isinstance(raw_revenue, float) and np.isnan(raw_revenue))) else raw_revenue
+                op_income = 0 if (raw_op_income is None or (isinstance(raw_op_income, float) and np.isnan(raw_op_income))) else raw_op_income
+
                 financials.append({
                     "year": date_str,
-                    "revenue": revenue,
-                    "op_income": op_income
+                    "revenue": float(revenue), # JSON 호환을 위해 명시적 float 변환
+                    "op_income": float(op_income)
                 })
         
         # 어닝 일정 및 결과 (최근)
