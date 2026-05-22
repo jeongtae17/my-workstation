@@ -166,14 +166,20 @@ async def read_root():
 @app.get("/analyze")
 async def analyze(ticker_query: str):
     try:
+        # 1. 티커 식별
         ticker = resolve_ticker(ticker_query)
         if ticker == "INVALID" or not ticker:
-            return {"error": f"'{ticker_query}'은(는) 유효하지 않거나 찾을 수 없는 종목입니다.", "status": "INVALID"}
+            return {"status": "ERROR", "error": f"'{ticker_query}'은(는) 유효하지 않거나 찾을 수 없는 종목입니다."}
 
+        # 2. 상장 폐지 여부 GPT 확인
         if check_delisted_with_gpt(ticker_query, ticker):
-             return {"error": f"'{ticker_query}'({ticker})은 상장 폐지된 종목입니다.", "status": "DELISTED"}
+             return {"status": "ERROR", "error": f"'{ticker_query}'({ticker})은 상장 폐지된 종목으로 분석이 불가능합니다."}
 
+        # 3. 데이터 로드 및 분석
         df = fetch_stock_data(ticker)
+        if df.empty:
+            return {"status": "ERROR", "error": "주가 데이터를 불러오는 데 실패했습니다."}
+
         company = fetch_company_info(ticker)
         df = calculate_indicators(df)
         signal, score = generate_signal(df)
@@ -184,18 +190,28 @@ async def analyze(ticker_query: str):
         news = fetch_news(ticker, company.get("name", ""))
         financials = fetch_financials(ticker)
         financials['current_price'] = df["Close"].iloc[-1]
+
         ai_result = analyze_ai(ticker, signal, score, rsi, macd, prob, news, financials)
         rule_style = determine_style(company, df, rsi)
 
         return {
-            "ticker": ticker, "company": company, "signal": signal, "score": score,
-            "rsi": float(rsi), "macd": float(macd), "macd_intensity": float(macd_intensity),
-            "probability": prob, "financials": financials, "rule_style": rule_style,
+            "status": "SUCCESS",
+            "ticker": ticker,
+            "company": company,
+            "signal": signal,
+            "score": score,
+            "rsi": float(rsi),
+            "macd": float(macd),
+            "macd_intensity": float(macd_intensity),
+            "probability": prob,
+            "financials": financials,
+            "rule_style": rule_style,
             "news": [{"title": n.title, "url": n.url} for n in news],
-            "ai_analysis": ai_result, "status": "SUCCESS"
+            "ai_analysis": ai_result
         }
     except Exception as e:
-        return {"error": str(e), "status": "ERROR"}
+        print(f"Server Error: {e}")
+        return {"status": "ERROR", "error": f"서버 분석 중 예외 발생: {str(e)}"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
