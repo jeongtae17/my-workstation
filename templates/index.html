@@ -172,10 +172,10 @@
             // News
             const newsList = document.getElementById('newsList');
             newsList.innerHTML = '';
-            data.news.slice(0, 5).forEach(n => {
+            data.news.slice(0, 7).forEach(n => {
                 const item = document.createElement('a');
                 item.href = n.url;
-                item.target = '_blank';
+                item.target = '_self'; // 현재 창(WebView)에서 뉴스 열기
                 item.className = 'block p-4 bg-white border border-gray-100 rounded-xl shadow-sm active:scale-95 transition-transform';
                 item.innerHTML = `
                     <div class="text-sm font-semibold text-gray-800 leading-snug">${n.title}</div>
