@@ -184,11 +184,41 @@ async def read_root():
     with open(template_path, "r", encoding="utf-8") as f:
         return f.read()
 
+def check_delisted_with_gpt(ticker_query: str, ticker: str):
+    """GPT를 사용하여 해당 종목이 상장 폐지되었는지 또는 상장 유지 중인지 확인합니다."""
+    try:
+        rsp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "당신은 전 세계 상장사 상태를 추적하는 금융 정보 전문가입니다. "
+                        "사용자가 입력한 종목명과 티커를 바탕으로 해당 종목이 현재 거래 가능한 상태인지(ACTIVE) 아니면 상장폐지(DELISTED)되었는지 확인하세요. "
+                        "반드시 'ACTIVE' 또는 'DELISTED' 중 하나만 답하세요."
+                    )
+                },
+                {"role": "user", "content": f"상태 확인: {ticker_query} (Ticker: {ticker})"}
+            ],
+            temperature=0,
+        )
+        status = rsp.choices[0].message.content.strip().upper()
+        return status == "DELISTED"
+    except:
+        return False
+
 @app.get("/analyze")
 async def analyze(ticker_query: str):
     try:
         # 1. GPT를 통해 가공된 티커를 받아옵니다.
         ticker = resolve_ticker(ticker_query)
+
+        # 2. 상장 폐지 여부 GPT 확인
+        if ticker != "INVALID" and check_delisted_with_gpt(ticker_query, ticker):
+             return {
+                "error": f"'{ticker_query}'({ticker})은 상장 폐지되었거나 현재 거래가 불가능한 종목으로 분석할 수 없습니다.",
+                "status": "DELISTED"
+            }
 
         # 유효하지 않은 입력(스포츠팀 등) 차단
         if ticker == "INVALID" or not ticker or len(ticker) > 15:
