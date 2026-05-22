@@ -144,9 +144,24 @@ def resolve_ticker_with_gpt(user_input: str):
                         "   - Only map to a specific subsidiary (e.g., Hanwha Engine, Samsung SDI) if the input EXPLICITLY mentions the subsidiary's business area (Engine, Insurance, etc.).\n"
                         "   - Example: 'شركة هانوا' (Hanwha Company) should resolve to '000880.KS' (Hanwha Corp), NOT an affiliate.\n\n"
 
+                        "6. INVALID & NON-STOCK ENTITIES (CRITICAL):\n"
+                        "   - If the user input refers to a non-publicly traded entity, such as a sports team (e.g., 'Eagles' (Hanwha Eagles), 'Damwon', 'T1'), a personal name, or any term that is NOT a tradable stock/ETF/Index, you MUST output 'INVALID'.\n"
+                        "   - Do NOT try to find the parent company unless the user specifically asks for it (e.g., '한화' is okay, but '한화이글스' should be INVALID).\n\n"
+
                         "📋 [EXACT MULTI-LANGUAGE MAPPING EXAMPLES]\n"
-                        "- '한화' / 'Hanwha' / 'شركة هانوا' -> '000880.KS'\n"
-                        "- '한화엔진' -> '082740.KS'\n"
+                        "- '더존비즈온' -> '012510.KS'\n"
+                        "- '아이에스씨' -> '095340.KQ'\n"
+                        "- '한화' -> '000880.KS'\n"
+                        "- '한화이글스' -> 'INVALID'\n"
+                        "- '담원' / '담원기아' -> 'INVALID'\n"
+                        "- 'T1' -> 'INVALID'\n"
+                        "- '아이온큐' -> 'IONQ'"
+                    )
+                },
+                {"role": "user", "content": f"Ticker for: {clean_input}"}
+            ],
+            temperature=0,
+        )
                         "- '아이에스씨' -> '095340.KQ'\n"
                         "- '아이온큐' -> 'IONQ'\n"
                         "- '엔비디아' -> 'NVDA'\n"
@@ -223,8 +238,33 @@ async def read_root():
 @app.get("/analyze")
 async def analyze(ticker_query: str):
     try:
+        # 1. GPT를 통해 가공된 티커를 먼저 받아옵니다.
         ticker = resolve_ticker(ticker_query)
-        df = fetch_stock_data(ticker)
+
+        # 만약 유효하지 않은 입력으로 판정되거나 공백이면 즉시 차단
+        if ticker == "INVALID" or not ticker or len(ticker) > 15:
+            return {
+                "error": f"'{ticker_query}'은(는) 유효하지 않은 종목명 또는 스포츠 팀 등으로 판단되어 분석할 수 없습니다.",
+                "status": "INVALID_INPUT"
+            }
+
+        # 2. yfinance 데이터 다운로드
+        try:
+            df = fetch_stock_data(ticker)
+        except Exception as e:
+            # 상장폐지나 오매핑 등으로 데이터가 없을 경우
+            return {
+                "error": f"'{ticker}'에 대한 주가 데이터를 찾을 수 없습니다. (상장폐지 또는 오매핑)",
+                "status": "NO_DATA"
+            }
+
+        if df.empty:
+            return {
+                "error": f"'{ticker}'의 데이터셋이 비어있어 분석이 불가능합니다.",
+                "status": "EMPTY_DATA"
+            }
+
+        # 3. 기존 분석 로직 진행
         company = fetch_company_info(ticker)
         df = calculate_indicators(df)
         signal, score = generate_signal(df)
@@ -256,10 +296,16 @@ async def analyze(ticker_query: str):
             "financials": financials,
             "news": [{"title": n.title, "url": n.url} for n in news],
             "ai_analysis": ai_result,
-            "rule_style": rule_style
+            "rule_style": rule_style,
+            "status": "SUCCESS"
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # 백엔드가 500 에러로 죽지 않도록 모든 예외를 캐치하여 프론트엔드에 에러 메시지 전달
+        print(f"Error analyzing ticker {ticker_query}: {str(e)}")
+        return {
+            "error": f"데이터 처리 중 에러 발생: {str(e)}",
+            "status": "ERROR"
+        }
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
