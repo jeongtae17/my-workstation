@@ -13,3 +13,5 @@ customtkinter
 pygooglenews
 feedparser
 dateparser
+lxml
+html5lib

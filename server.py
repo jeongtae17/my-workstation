@@ -81,8 +81,8 @@ def resolve_ticker_with_gpt(user_input: str):
         )
 
         ticker = rsp.choices[0].message.content.strip().upper()
-        # 불필요한 따옴표나 공백 제거
-        ticker = "".join(c for c in ticker if c.isalnum() or c in ".-")
+        # 불필요한 따옴표, 공백, 보이지 않는 문자 전처리 강화
+        ticker = "".join(c for c in ticker if c.isalnum() or c in ".-").strip()
 
         if not ticker or len(ticker) > 12:
             return None
