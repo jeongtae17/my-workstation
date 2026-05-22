@@ -10,3 +10,6 @@ pillow
 mplfinance
 numpy
 customtkinter
+pygooglenews
+feedparser
+dateparser
