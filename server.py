@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 # Import core services
-from stock_analyzer.services.data_service import fetch_stock_data, fetch_company_info, fetch_news, fetch_financials
+from stock_analyzer.services.data_service import fetch_stock_data, fetch_company_info, fetch_news, fetch_financials, validate_ticker
 from stock_analyzer.services.analysis_service import calculate_indicators, generate_signal, calculate_probability, determine_style
 from stock_analyzer.services.ai_service import analyze_ai
 
@@ -57,16 +57,18 @@ def resolve_ticker_with_gpt(user_input: str):
                         
                         "⚠️ [CRITICAL SEARCH RULES]\n"
                         "1. KOREAN LISTED COMPANY:\n"
-                        "   - If the input represents a company listed on the Korea Exchange (KRX), "
+                        "   - If the input represents a company primarily active or listed in Korea (e.g., '더존', '아이에스씨', 'ISC', '한화'), "
                         "     you MUST find its 6-digit stock code and attach '.KS' (KOSPI) or '.KQ' (KOSDAQ).\n"
+                        "   - IMPORTANT: Abbreviations like 'ISC' are very often Korean companies (095340.KQ). Search KRX market first for these.\n"
                         "2. US & INTERNATIONAL LISTED COMPANY:\n"
-                        "   - If the company is listed on US exchanges (NYSE, NASDAQ, etc.), provide the raw ticker (e.g., 'NVDA', 'IONQ', 'AAPL').\n"
-                        "   - DO NOT attach '.KS' or '.KQ' to companies listed outside Korea.\n"
+                        "   - If the company is clearly a global giant (NVDA, TSLA, AAPL, MSFT), provide the raw ticker.\n"
                         "3. RESPONSE FORMAT:\n"
                         "   - Output ONLY the raw ticker symbol. Absolutely NO explanations, NO quotes, NO markdown, NO spaces.\n\n"
 
                         "📋 [EXACT MAPPING EXAMPLES]\n"
                         "- '더존비즈온' -> '012515.KS'\n"
+                        "- 'ISC' -> '095340.KQ'\n"
+                        "- '아이에스씨' -> '095340.KQ'\n"
                         "- '아이온큐' -> 'IONQ'\n"
                         "- '엔비디아' -> 'NVDA'\n"
                         "- '삼성전자' -> '005930.KS'\n"
@@ -98,16 +100,17 @@ def resolve_ticker(user_input: str):
     if user_input.upper() in KOREAN_TICKER_MAP:
         return KOREAN_TICKER_MAP[user_input.upper()]
 
-    # 2. 영문 1-5자면 티커로 간주
-    if 1 <= len(user_input) <= 5 and user_input.isalpha() and user_input.isascii():
-        return user_input.upper()
+    # 2. 영문 1-5자면 '미국 주식'일 가능성을 먼저 체크하되, GPT의 판단을 보조적으로 활용함
+    # "ISC" 같은 경우 미국에도 티커가 있을 수 있으나, 한국 사용자는 보통 한국 종목을 원함
     
-    # 3. GPT 검색
+    # 3. GPT 검색 + 유효성 검증
     gpt_ticker = resolve_ticker_with_gpt(user_input)
-    if gpt_ticker:
+    if gpt_ticker and validate_ticker(gpt_ticker):
         return gpt_ticker
     
-    return user_input.upper()
+    # 4. GPT가 실패하거나 유효하지 않은 경우 마지막 수단으로 입력값 그대로 시도
+    final_attempt = user_input.upper()
+    return final_attempt
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
@@ -132,6 +135,10 @@ async def analyze(ticker_query: str):
         prob = calculate_probability(score, rsi, macd, df)
         news = fetch_news(ticker, company.get("name", ""))
         financials = fetch_financials(ticker)
+
+        # 주가 정보 추가 (MACD 분석용)
+        financials['current_price'] = df["Close"].iloc[-1]
+
         ai_result = analyze_ai(ticker, signal, score, rsi, macd, prob, news, financials)
         rule_style = determine_style(company, df, rsi)
 

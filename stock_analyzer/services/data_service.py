@@ -5,6 +5,15 @@ import yfinance as yf
 from stock_analyzer.config import NEWS_API_KEY
 from stock_analyzer.models import NewsItem
 
+def validate_ticker(ticker: str) -> bool:
+    """해당 티커가 실제로 주가 조회가 가능하고 정상적인 데이터셋을 가졌는지 검증합니다."""
+    try:
+        # 매우 짧은 기간(1일)만 시도하여 속도 최적화
+        df = yf.download(ticker, period="1d", progress=False)
+        return not df.empty
+    except:
+        return False
+
 def fetch_stock_data(ticker):
     df = yf.download(
         ticker,

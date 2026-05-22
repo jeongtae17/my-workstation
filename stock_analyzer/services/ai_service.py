@@ -31,10 +31,13 @@ def analyze_ai(
 - Score: {score}
 - RSI: {rsi:.2f}
 - MACD: {macd:.2f}
+- MACD Intensity (강도): {(macd / financials.get('current_price', 1) * 100) if financials and financials.get('current_price') else 'N/A'}%
 - 상승 확률: {prob}%
 {fin_text}
 뉴스:
 {headlines}
+
+주의: MACD 수치가 크게 느껴질 수 있으나, 이는 주가 절대값이 높은 한국 종목(예: 5만원 이상)에서 정상적인 현상입니다. MACD 강도(Intensity) 비율을 참고하여 과매도/과매수 여부를 판단하세요.
 
 위의 기술적 지표, 재무 데이터(매출/영업이익 성장세), 어닝 결과를 종합적으로 분석하여 투자 전략을 제시하세요.
 아래 JSON 형식으로만 답변:
