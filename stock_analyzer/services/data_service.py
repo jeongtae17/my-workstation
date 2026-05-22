@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 import yfinance as yf
 from pygooglenews import GoogleNews
-from stock_analyzer.config import NEWS_API_KEY
+from stock_analyzer.config import NEWS_API_KEY, client
 from stock_analyzer.models import NewsItem
 
 
@@ -79,47 +79,124 @@ def fetch_financials(ticker):
         return {"history": [], "earnings_summary": "N/A"}
 
 
+def is_news_relevant_ai(ticker, company_name, title, description=""):
+    """AI를 사용해 뉴스 관련도를 필터링합니다."""
+    try:
+        context = f"Company: {company_name}, Ticker: {ticker}, Title: {title}"
+        if description:
+            context += f", Description: {description}"
+        rsp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a news relevance filter. Return only RELEVANT or NOT_RELEVANT. "
+                        "Filter out false positives like BB gun for BlackBerry stock."
+                    ),
+                },
+                {"role": "user", "content": f"Is this news relevant to {company_name}? {title}"},
+            ],
+            temperature=0,
+            timeout=5,
+        )
+        result = rsp.choices[0].message.content.strip().upper()
+        return "RELEVANT" in result
+    except Exception as e:
+        print(f"AI news filter error ({ticker}): {e}")
+        text = (title + " " + description).lower()
+        return company_name.lower() in text or ticker.lower() in text
+
+
+def fetch_news_from_newsapi(ticker, company_name="", is_korean=False):
+    if not NEWS_API_KEY:
+        return []
+    try:
+        clean_ticker = ticker if ticker.startswith("^") else (ticker.split(".")[0] if "." in ticker else ticker)
+        if ticker == "^KS11":
+            query = "코스피"
+        elif ticker == "^KQ11":
+            query = "코스닥"
+        elif ticker == "^GSPC":
+            query = "S&P 500"
+        elif ticker == "^IXIC":
+            query = "Nasdaq Composite"
+        else:
+            if company_name:
+                query = f'"{company_name}" OR "{clean_ticker}" stock' if not is_korean else f'"{company_name}" OR "{clean_ticker}"'
+            else:
+                query = f'"{clean_ticker}"'
+        url = "https://newsapi.org/v2/everything"
+        params = {
+            "q": query,
+            "sortBy": "publishedAt",
+            "language": "ko" if is_korean else "en",
+            "pageSize": 30,
+            "apiKey": NEWS_API_KEY,
+        }
+        r = requests.get(url, params=params, timeout=10)
+        data = r.json()
+        if data.get("status") != "ok":
+            return []
+        items = []
+        seen_titles = set()
+        for article in data.get("articles", []):
+            title = article.get("title", "")
+            url = article.get("url", "")
+            description = article.get("description", "")
+            if not title or title in seen_titles:
+                continue
+            if not is_news_relevant_ai(ticker, company_name, title, description):
+                continue
+            items.append(NewsItem(title=title, url=url))
+            seen_titles.add(title)
+            if len(items) >= 5:
+                break
+        return items
+    except Exception as e:
+        print(f"NewsAPI error ({ticker}): {e}")
+        return []
+
+
 def fetch_news(ticker, company_name=""):
     try:
         is_korean = ticker.endswith(".KS") or ticker.endswith(".KQ") or ticker == "^KS11" or ticker == "^KQ11"
-        if ticker.startswith("^"):
-            clean_ticker = ticker
-        else:
-            clean_ticker = ticker.split(".")[0] if "." in ticker else ticker
+        items = fetch_news_from_newsapi(ticker, company_name, is_korean)
+        if items:
+            return items
 
-        if is_korean:
-            gn = GoogleNews(lang="ko", country="KR")
+        try:
+            clean_ticker = ticker if ticker.startswith("^") else (ticker.split(".")[0] if "." in ticker else ticker)
+            gn = GoogleNews(lang="ko" if is_korean else "en", country="KR" if is_korean else "US")
             if ticker == "^KS11":
                 search_query = "코스피 지수"
             elif ticker == "^KQ11":
                 search_query = "코스닥 지수"
-            else:
-                search_query = f'"{company_name}" OR "{clean_ticker}"' if company_name else f'"{clean_ticker}"'
-        else:
-            gn = GoogleNews(lang="en", country="US")
-            if ticker == "^GSPC":
+            elif ticker == "^GSPC":
                 search_query = "S&P 500 index"
             elif ticker == "^IXIC":
                 search_query = "Nasdaq Composite index"
             else:
-                search_query = f'"{company_name}" OR "{clean_ticker}"' if company_name else f'"{clean_ticker}"'
-
-        s = gn.search(search_query)
-        entries = s.get("entries", [])
-        items = []
-        seen_titles = set()
-
-        for e in entries:
-            title = e.get("title", "")
-            link = e.get("link", "")
-            if not title or title in seen_titles:
-                continue
-            items.append(NewsItem(title=title, url=link))
-            seen_titles.add(title)
-            if len(items) >= 20:
-                break
-
-        return items
+                if ticker.upper() == "BB":
+                    search_query = f'"{company_name}" OR "{clean_ticker}" -"BB gun" -"toy gun" -airsoft -paintball -"school bus"'
+                else:
+                    search_query = f'"{company_name}" OR "{clean_ticker}"' if company_name else f'"{clean_ticker}"'
+            s = gn.search(search_query)
+            items = []
+            seen_titles = set()
+            for e in s.get("entries", [])[:20]:
+                title = e.get("title", "")
+                link = e.get("link", "")
+                if not title or title in seen_titles:
+                    continue
+                items.append(NewsItem(title=title, url=link))
+                seen_titles.add(title)
+                if len(items) >= 20:
+                    break
+            return items
+        except Exception as e:
+            print(f"Google News error ({ticker}): {e}")
+            return []
     except Exception as e:
         print(f"News fetch error ({ticker}): {e}")
         return []
