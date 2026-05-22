@@ -3,13 +3,13 @@ import requests
 import pandas as pd
 import yfinance as yf
 from pygooglenews import GoogleNews
-from stock_analyzer.config import NEWS_API_KEY
+from stock_analyzer.config import NEWS_API_KEY, client
 from stock_analyzer.models import NewsItem
 
 def validate_ticker(ticker: str) -> bool:
-    """í•´ë‹¹ í‹°ì»¤ê°€ ì‹¤ì œë¡œ ì£¼ê°€ ì¡°íšŒê°€ ê°€ëŠ¥í•˜ê³  ì •ìƒì ì¸ ë°ì´í„°ì…‹ì„ ê°€ì¡ŒëŠ”ì§€ ê²€ì¦í•©ë‹ˆë‹¤."""
+    """?•´?‹¹ ?‹°ì»¤ê?? ?‹¤? œë¡? ì£¼ê?? ì¡°íšŒê°? ê°??Š¥?•˜ê³? ? •?ƒ? ?¸ ?°?´?„°?…‹?„ ê°?ì¡ŒëŠ”ì§? ê²?ì¦í•©?‹ˆ?‹¤."""
     try:
-        # ë§¤ìš° ì§§ì€ ê¸°ê°„(1ì¼)ë§Œ ì‹œë„í•˜ì—¬ ì†ë„ ìµœì í™”
+        # ë§¤ìš° ì§§ì?? ê¸°ê°„(1?¼)ë§? ?‹œ?„?•˜?—¬ ?†?„ ìµœì ?™”
         df = yf.download(ticker, period="1d", progress=False)
         return not df.empty
     except:
@@ -24,7 +24,7 @@ def fetch_stock_data(ticker):
     )
 
     if df.empty:
-        raise Exception("ì£¼ê°€ ë°ì´í„° ì—†ìŒ")
+        raise Exception("ì£¼ê?? ?°?´?„° ?—†?Œ")
 
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
@@ -47,18 +47,18 @@ def fetch_company_info(ticker):
 def fetch_financials(ticker):
     try:
         stock = yf.Ticker(ticker)
-        # ì†ìµê³„ì‚°ì„œ (ì—°ê°„)
+        # ?†?µê³„ì‚°?„œ (?—°ê°?)
         income_stmt = stock.income_stmt
         
-        # ìµœê·¼ 3~4ë…„ ë°ì´í„° ì¶”ì¶œ
+        # ìµœê·¼ 3~4?…„ ?°?´?„° ì¶”ì¶œ
         financials = []
         if income_stmt is not None and not income_stmt.empty:
-            import numpy as np # NaN ì²˜ë¦¬ë¥¼ ìœ„í•´ ì¶”ê°€
-            cols = income_stmt.columns[:4] # ìµœê·¼ 4ë…„ì¹˜
+            import numpy as np # NaN ì²˜ë¦¬ë¥? ?œ„?•´ ì¶”ê??
+            cols = income_stmt.columns[:4] # ìµœê·¼ 4?…„ì¹?
             for col in cols:
                 date_str = str(col.date())
 
-                # ë°ì´í„°ê°€ ì—†ê±°ë‚˜ NaNì¸ ê²½ìš° 0ìœ¼ë¡œ ì²˜ë¦¬í•˜ì—¬ JSON ì—ëŸ¬ ë°©ì§€
+                # ?°?´?„°ê°? ?—†ê±°ë‚˜ NaN?¸ ê²½ìš° 0?œ¼ë¡? ì²˜ë¦¬?•˜?—¬ JSON ?—?Ÿ¬ ë°©ì??
                 raw_revenue = income_stmt.loc["Total Revenue", col] if "Total Revenue" in income_stmt.index else 0
                 raw_op_income = income_stmt.loc["Operating Income", col] if "Operating Income" in income_stmt.index else 0
 
@@ -67,11 +67,11 @@ def fetch_financials(ticker):
 
                 financials.append({
                     "year": date_str,
-                    "revenue": float(revenue), # JSON í˜¸í™˜ì„ ìœ„í•´ ëª…ì‹œì  float ë³€í™˜
+                    "revenue": float(revenue), # JSON ?˜¸?™˜?„ ?œ„?•´ ëª…ì‹œ?  float ë³??™˜
                     "op_income": float(op_income)
                 })
         
-        # ì–´ë‹ ì¼ì • ë° ê²°ê³¼ (ìµœê·¼)
+        # ?–´?‹ ?¼? • ë°? ê²°ê³¼ (ìµœê·¼)
         earnings_dates = stock.earnings_dates
         earnings_info = ""
         if earnings_dates is not None and not earnings_dates.empty:
@@ -86,18 +86,18 @@ def fetch_financials(ticker):
             "earnings_summary": earnings_info
         }
     except Exception as e:
-        print(f"ì¬ë¬´ ë°ì´í„° ìˆ˜ì§‘ ì˜¤ë¥˜ ({ticker}):", e)
+        print(f"?¬ë¬? ?°?´?„° ?ˆ˜ì§? ?˜¤ë¥? ({ticker}):", e)
         return {"history": [], "earnings_summary": "N/A"}
 
 def fetch_news(ticker, company_name=""):
     """
-    êµ¬ê¸€ ë‰´ìŠ¤ë¥¼ ì‚¬ìš©í•˜ì—¬ ì¢…ëª© ê´€ë ¨ ìµœì‹  ë‰´ìŠ¤ë¥¼ ê°€ì ¸ì˜µë‹ˆë‹¤.
-    íšŒì‚¬ëª…ê³¼ í‹°ì»¤ë¥¼ ëª¨ë‘ ê²€ìƒ‰ ì¿¼ë¦¬ì— í¬í•¨í•˜ì—¬ ê²€ìƒ‰ ê²°ê³¼ì˜ í­ì„ ë„“í™ë‹ˆë‹¤.
+    êµ¬ê?? ?‰´?Š¤ë¥? ?‚¬?š©?•˜?—¬ ì¢…ëª© ê´?? ¨ ìµœì‹  ?‰´?Š¤ë¥? ê°?? ¸?˜µ?‹ˆ?‹¤.
+    ?šŒ?‚¬ëª…ê³¼ ?‹°ì»¤ë?? ëª¨ë‘ ê²??ƒ‰ ì¿¼ë¦¬?— ?¬?•¨?•˜?—¬ ê²??ƒ‰ ê²°ê³¼?˜ ?­?„ ?„“?™?‹ˆ?‹¤.
     """
     try:
         is_korean = ticker.endswith(".KS") or ticker.endswith(".KQ") or ticker == "^KS11" or ticker == "^KQ11"
 
-        # í‹°ì»¤ì—ì„œ ì ‘ë¯¸ì‚¬(.KS, .KQ) ì œê±°í•˜ì—¬ ìˆœìˆ˜ ì½”ë“œ ë˜ëŠ” ì‹¬ë³¼ ì¶”ì¶œ (ì¸ë±ìŠ¤ëŠ” ì˜ˆì™¸)
+        # ?‹°ì»¤ì—?„œ ? ‘ë¯¸ì‚¬(.KS, .KQ) ? œê±°í•˜?—¬ ?ˆœ?ˆ˜ ì½”ë“œ ?˜?Š” ?‹¬ë³? ì¶”ì¶œ (?¸?±?Š¤?Š” ?˜ˆ?™¸)
         if ticker.startswith('^'):
             clean_ticker = ticker
         else:
@@ -105,13 +105,13 @@ def fetch_news(ticker, company_name=""):
 
         if is_korean:
             gn = GoogleNews(lang='ko', country='KR')
-            # í•œêµ­ ì£¼ì‹/ì§€ìˆ˜ ì˜ˆ: "ë”ì¡´ë¹„ì¦ˆì˜¨ OR 012510", "ì½”ìŠ¤í”¼ OR ^KS11"
-            if ticker == "^KS11": search_query = "ì½”ìŠ¤í”¼ ì§€ìˆ˜ ì „ë§"
-            elif ticker == "^KQ11": search_query = "ì½”ìŠ¤ë‹¥ ì§€ìˆ˜ ì „ë§"
+            # ?•œêµ? ì£¼ì‹/ì§??ˆ˜ ?˜ˆ: "?”ì¡´ë¹„ì¦ˆì˜¨ OR 012510", "ì½”ìŠ¤?”¼ OR ^KS11"
+            if ticker == "^KS11": search_query = "ì½”ìŠ¤?”¼ ì§??ˆ˜ ? „ë§?"
+            elif ticker == "^KQ11": search_query = "ì½”ìŠ¤?‹¥ ì§??ˆ˜ ? „ë§?"
             else: search_query = f'"{company_name}" OR "{clean_ticker}"' if company_name else f'"{clean_ticker}"'
         else:
             gn = GoogleNews(lang='en', country='US')
-            # ë¯¸êµ­ ì£¼ì‹/ì§€ìˆ˜
+            # ë¯¸êµ­ ì£¼ì‹/ì§??ˆ˜
             if ticker == "^GSPC": search_query = "S&P 500 index"
             elif ticker == "^IXIC": search_query = "Nasdaq Composite index"
             else: search_query = f'"{company_name}" OR "{clean_ticker}"' if company_name else f'"{clean_ticker}"'
@@ -137,11 +137,11 @@ def fetch_news(ticker, company_name=""):
             )
             seen_titles.add(title)
 
-            if len(items) >= 20: # AI ë¶„ì„ì„ ìœ„í•´ ë” ë§ì€ ë‰´ìŠ¤(20ê°œ)ë¥¼ ìˆ˜ì§‘
+            if len(items) >= 20: # AI ë¶„ì„?„ ?œ„?•´ ?” ë§ì?? ?‰´?Š¤(20ê°?)ë¥? ?ˆ˜ì§?
                 break
                 
         return items
 
     except Exception as e:
-        print(f"ë‰´ìŠ¤ ìˆ˜ì§‘ ì˜¤ë¥˜ ({ticker}):", e)
+        print(f"?‰´?Š¤ ?ˆ˜ì§? ?˜¤ë¥? ({ticker}):", e)
         return []
