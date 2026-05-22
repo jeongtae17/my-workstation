@@ -2,6 +2,7 @@
 import requests
 import pandas as pd
 import yfinance as yf
+from pygooglenews import GoogleNews
 from stock_analyzer.config import NEWS_API_KEY
 from stock_analyzer.models import NewsItem
 
@@ -82,78 +83,49 @@ def fetch_financials(ticker):
         return {"history": [], "earnings_summary": "N/A"}
 
 def fetch_news(ticker, company_name=""):
-    if not NEWS_API_KEY:
-        return []
-
+    """
+    구글 뉴스를 사용하여 종목 관련 최신 뉴스를 가져옵니다.
+    한국 종목(.KS, .KQ)의 경우 한국어 뉴스를, 그 외에는 영어 뉴스를 검색합니다.
+    """
     try:
-        from datetime import datetime, timedelta
-        # 최근 1개월(약 30일) 전 날짜 계산
-        one_month_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        is_korean = ticker.endswith(".KS") or ticker.endswith(".KQ")
         
-        url = "https://newsapi.org/v2/everything"
+        if is_korean:
+            gn = GoogleNews(lang='ko', country='KR')
+            # 한국 주식은 '회사명 주식'으로 검색하는 것이 가장 정확함
+            search_query = f"{company_name} 주식" if company_name else f"{ticker} 주식"
+        else:
+            gn = GoogleNews(lang='en', country='US')
+            search_query = f"{ticker} stock"
+
+        s = gn.search(search_query)
+        entries = s.get('entries', [])
         
-        # 1차 시도: 티커로 검색
-        query = f'"{ticker}"'
-        if company_name:
-            # 2차 시도: 회사명 포함 검색
-            query = f'"{ticker}" OR "{company_name}"'
-
-        params = {
-            "q": query,
-            "language": "en",
-            "sortBy": "publishedAt",
-            "pageSize": 40,
-            "from": one_month_ago, # 최근 1개월 데이터 요청
-            "apiKey": NEWS_API_KEY
-        }
-
-        headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(url, params=params, headers=headers, timeout=10)
-        data = r.json()
-
-        articles = data.get("articles", [])
-        
-        # 만약 결과가 너무 적으면 회사명으로만 재검색 (Broad search)
-        if len(articles) < 3 and company_name:
-            params["q"] = company_name
-            r = requests.get(url, params=params, headers=headers, timeout=10)
-            articles = r.json().get("articles", [])
-
         items = []
         seen_titles = set()
 
-        for a in articles:
-            title = a.get("title", "")
+        for e in entries:
+            title = e.get('title', '')
+            link = e.get('link', '')
+
             if not title or title in seen_titles:
                 continue
-            
-            # 필터링 조건 완화: 티커나 회사명 중 하나라도 제목에 포함되면 인정
-            # 단, 너무 일반적인 단어일 경우를 대비해 간단한 체크
-            lower_title = title.lower()
-            ticker_match = ticker.lower() in lower_title
-            company_match = (
-                any(word.lower() in lower_title for word in company_name.split())
-                if company_name else False
-            )
-
-            if not (ticker_match or company_match):
-                # 제목에 없더라도 설명(description)에 있을 수 있음
-                desc = a.get("description", "") or ""
-                if not (ticker.lower() in desc.lower()):
-                    continue
 
             items.append(
                 NewsItem(
                     title=title,
-                    url=a.get("url", "")
+                    url=link
                 )
             )
             seen_titles.add(title)
+
             if len(items) >= 5:
                 break
                 
+        # 만약 구글 뉴스 결과가 너무 적으면 (드문 경우), 기존 NewsAPI로 폴백할 수도 있지만
+        # 구글 뉴스가 일반적으로 더 풍부하므로 여기서는 구글 뉴스만 사용함
         return items
 
     except Exception as e:
-        print("뉴스 수집 오류:", e)
+        print(f"뉴스 수집 오류 ({ticker}):", e)
         return []
