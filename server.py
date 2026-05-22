@@ -45,7 +45,8 @@ def load_ticker_map():
     base_map = {
         "코스피": "^KS11", "KOSPI": "^KS11", "코스닥": "^KQ11", "KOSDAQ": "^KQ11",
         "나스닥": "^IXIC", "NASDAQ": "^IXIC", "S&P 500": "^GSPC", "S&P500": "^GSPC",
-        "하닉": "000660.KS", "삼전": "005930.KS", "포홀": "005490.KS", "곱버스": "252670.KS"
+        "하닉": "000660.KS", "삼전": "005930.KS", "포홀": "005490.KS", "곱버스": "252670.KS",
+        "dxyz": "DXYZ", "DXYZ": "DXYZ", "데스티니 테크 100": "DXYZ", "Destiny Tech 100": "DXYZ"
     }
     # 2. 파일 로드 (전체 국내 주식 리스트)
     if os.path.exists(TICKER_FILE):
