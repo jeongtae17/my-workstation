@@ -56,12 +56,21 @@ def resolve_ticker_with_gpt(user_input: str):
                         "into the exact Yahoo Finance ticker symbol string.\n\n"
                         
                         "⚠️ [CRITICAL SEARCH RULES]\n"
-                        "1. KOREAN COMPANY PRIORITY:\n"
-                        "   - If the input is written in Korean OR represents a Korean listed company, "
+                        "1. KOREAN LISTED COMPANY:\n"
+                        "   - If the input represents a company listed on the Korea Exchange (KRX), "
                         "     you MUST find its 6-digit stock code and attach '.KS' (KOSPI) or '.KQ' (KOSDAQ).\n"
-                        "2. RESPONSE FORMAT:\n"
-                        "   - Output ONLY the raw ticker symbol (e.g., '012515.KS', 'NVDA').\n"
-                        "   - Absolutely NO explanations, NO quotes, NO markdown, NO spaces.\n"
+                        "2. US & INTERNATIONAL LISTED COMPANY:\n"
+                        "   - If the company is listed on US exchanges (NYSE, NASDAQ, etc.), provide the raw ticker (e.g., 'NVDA', 'IONQ', 'AAPL').\n"
+                        "   - DO NOT attach '.KS' or '.KQ' to companies listed outside Korea.\n"
+                        "3. RESPONSE FORMAT:\n"
+                        "   - Output ONLY the raw ticker symbol. Absolutely NO explanations, NO quotes, NO markdown, NO spaces.\n\n"
+
+                        "📋 [EXACT MAPPING EXAMPLES]\n"
+                        "- '더존비즈온' -> '012515.KS'\n"
+                        "- '아이온큐' -> 'IONQ'\n"
+                        "- '엔비디아' -> 'NVDA'\n"
+                        "- '삼성전자' -> '005930.KS'\n"
+                        "- '테슬라' -> 'TSLA'"
                     )
                 },
                 {"role": "user", "content": f"Ticker for: {clean_input}"}
