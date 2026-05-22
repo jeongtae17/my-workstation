@@ -156,7 +156,17 @@
             // Indicators
             document.getElementById('rsiValue').innerText = data.rsi.toFixed(2);
             document.getElementById('probValue').innerText = data.probability + '%';
-            document.getElementById('aiAnalysis').innerText = data.ai_analysis;
+
+            // AI Analysis Object Handling
+            const ai = data.ai_analysis;
+            let summaryText = "분석 데이터를 가져오지 못했습니다.";
+            if (typeof ai === 'object' && ai !== null) {
+                summaryText = ai.summary || ai.content || JSON.stringify(ai);
+            } else {
+                summaryText = ai;
+            }
+            document.getElementById('aiAnalysis').innerText = summaryText;
+
             document.getElementById('ruleStyle').innerText = data.rule_style;
 
             // News

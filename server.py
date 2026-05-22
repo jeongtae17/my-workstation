@@ -27,8 +27,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 종목명 -> 티커 매핑 (하드코딩 추천 리스트)
+KOREAN_TICKER_MAP = {
+    "삼성전자": "005930.KS", "삼전": "005930.KS", "삼성전자우": "005935.KS",
+    "SK하이닉스": "000660.KS", "하이닉스": "000660.KS",
+    "더존비즈온": "012515.KS", "더존": "012515.KS",
+    "카카오": "035720.KS", "네이버": "035420.KS", "NAVER": "035420.KS",
+    "현대차": "005380.KS", "기아": "000270.KS",
+    "에코프로": "086520.KQ", "에코프로비엠": "247540.KQ",
+    "포스코홀딩스": "005490.KS", "POSCO홀딩스": "005490.KS",
+    "엔비디아": "NVDA", "애플": "AAPL", "테슬라": "TSLA", "마이크로소프트": "MSFT",
+    "구글": "GOOGL", "아마존": "AMZN", "메타": "META", "아이온큐": "IONQ"
+}
+
 def resolve_ticker_with_gpt(user_input: str):
+    """정교화된 시스템 컨텍스트 규칙에 맞춰 한글/영문명을 야후 파이낸스 규격 티커로 매칭합니다."""
     try:
+        clean_input = user_input.strip()
+
         rsp = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -41,46 +57,43 @@ def resolve_ticker_with_gpt(user_input: str):
                         
                         "⚠️ [CRITICAL SEARCH RULES]\n"
                         "1. KOREAN COMPANY PRIORITY:\n"
-                        "   - If the input is written in Korean (e.g., '더존비즈온', '삼성전자') OR represents a Korean listed company via English translation/romanization (e.g., 'Douzone', 'NAVER', 'ISC'), "
-                        "     you MUST find its 6-digit stock code listed on the Korea Exchange (KRX) and attach '.KS' (KOSPI) or '.KQ' (KOSDAQ).\n"
-                        "   - NEVER map a clear Korean company name to a US or international ticker just because the spelling or sound is similar.\n\n"
+                        "   - If the input is written in Korean OR represents a Korean listed company, "
+                        "     you MUST find its 6-digit stock code and attach '.KS' (KOSPI) or '.KQ' (KOSDAQ).\n"
                         "2. RESPONSE FORMAT:\n"
-                        "   - Output ONLY the raw ticker symbol (e.g., '012515.KS', 'NVDA', '005930.KS').\n"
-                        "   - Absolutely NO explanations, NO quotes, NO markdown, NO spaces, NO trailing periods.\n\n"
-                        "3. TEMPERATURE CONSTRAINT:\n"
-                        "   - You must act deterministically. Do not guess non-existent tickers. If you are certain it is a Korean stock but the exact suffix is ambiguous, default to the most accurate historical exchange registration.\n\n"
-                        
-                        "🧠 [THINKING PROCESS & EXEMPLARS]\n"
-                        "- User: '더존비즈온' -> Romanized: Douzone Bizon -> Korean KOSPI listed software company -> Ticker: '012515.KS'\n"
-                        "- User: 'ISC' -> Korean semiconductor test socket manufacturer listed on KOSDAQ -> Ticker: '095340.KQ'\n"
-                        "- User: '한화에어로스페이스' -> Hanwha Aerospace -> KOSPI listed defense company -> Ticker: '012450.KS'\n"
-                        "- User: '카카오' -> Kakao -> KOSPI listed -> Ticker: '035720.KS'\n"
-                        "- User: 'Nvidia' -> US listed global tech company -> Ticker: 'NVDA'\n\n"
-                        
-                        "📋 [EXACT MAPPING EXAMPLES]\n"
-                        "- '더존비즈온' -> '012515.KS'\n"
-                        "- '더존' -> '012515.KS'\n"
-                        "- 'ISC' -> '095340.KQ'\n"
-                        "- '삼성전자' -> '005930.KS'\n"
-                        "- '에코프로비엠' -> '247540.KQ'\n"
-                        "- 'Apple' -> 'AAPL'\n"
-                        "- 'TSLA' -> 'TSLA'"
+                        "   - Output ONLY the raw ticker symbol (e.g., '012515.KS', 'NVDA').\n"
+                        "   - Absolutely NO explanations, NO quotes, NO markdown, NO spaces.\n"
                     )
                 },
-                {"role": "user", "content": f"다음의 Yahoo Finance 티커를 알려줘: {user_input}"}
+                {"role": "user", "content": f"Ticker for: {clean_input}"}
             ],
             temperature=0,
         )
+
         ticker = rsp.choices[0].message.content.strip().upper()
-        return ticker if " " not in ticker else None
+        # 불필요한 따옴표나 공백 제거
+        ticker = "".join(c for c in ticker if c.isalnum() or c in ".-")
+
+        if not ticker or len(ticker) > 12:
+            return None
+
+        return ticker
     except:
         return None
 
 def resolve_ticker(user_input: str):
     user_input = user_input.strip()
+
+    # 1. 하드코딩 맵 우선 확인
+    if user_input in KOREAN_TICKER_MAP:
+        return KOREAN_TICKER_MAP[user_input]
+    if user_input.upper() in KOREAN_TICKER_MAP:
+        return KOREAN_TICKER_MAP[user_input.upper()]
+
+    # 2. 영문 1-5자면 티커로 간주
     if 1 <= len(user_input) <= 5 and user_input.isalpha() and user_input.isascii():
         return user_input.upper()
     
+    # 3. GPT 검색
     gpt_ticker = resolve_ticker_with_gpt(user_input)
     if gpt_ticker:
         return gpt_ticker
