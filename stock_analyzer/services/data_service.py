@@ -85,18 +85,22 @@ def fetch_financials(ticker):
 def fetch_news(ticker, company_name=""):
     """
     구글 뉴스를 사용하여 종목 관련 최신 뉴스를 가져옵니다.
-    한국 종목(.KS, .KQ)의 경우 한국어 뉴스를, 그 외에는 영어 뉴스를 검색합니다.
+    회사명과 티커를 모두 검색 쿼리에 포함하여 검색 결과의 폭을 넓힙니다.
     """
     try:
         is_korean = ticker.endswith(".KS") or ticker.endswith(".KQ")
-        
+
+        # 티커에서 접미사(.KS, .KQ) 제거하여 순수 코드 또는 심볼 추출
+        clean_ticker = ticker.split('.')[0] if '.' in ticker else ticker
+
         if is_korean:
             gn = GoogleNews(lang='ko', country='KR')
-            # 한국 주식은 '회사명 주식'으로 검색하는 것이 가장 정확함
-            search_query = f"{company_name} 주식" if company_name else f"{ticker} 주식"
+            # 한국 주식 예: "더존비즈온 OR 012510"
+            search_query = f'"{company_name}" OR "{clean_ticker}"' if company_name else f'"{clean_ticker}"'
         else:
             gn = GoogleNews(lang='en', country='US')
-            search_query = f"{ticker} stock"
+            # 미국 주식 예: "Nvidia OR NVDA"
+            search_query = f'"{company_name}" OR "{clean_ticker}"' if company_name else f'"{clean_ticker}"'
 
         s = gn.search(search_query)
         entries = s.get('entries', [])
@@ -119,11 +123,9 @@ def fetch_news(ticker, company_name=""):
             )
             seen_titles.add(title)
 
-            if len(items) >= 5:
+            if len(items) >= 7: # 검색 결과 표시 개수를 약간 늘림
                 break
                 
-        # 만약 구글 뉴스 결과가 너무 적으면 (드문 경우), 기존 NewsAPI로 폴백할 수도 있지만
-        # 구글 뉴스가 일반적으로 더 풍부하므로 여기서는 구글 뉴스만 사용함
         return items
 
     except Exception as e:
