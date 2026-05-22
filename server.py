@@ -45,6 +45,7 @@ KOREAN_TICKER_MAP = {
     "아이에스씨": "095340.KQ", "ISC": "095340.KQ",
     "카카오": "035720.KS", "네이버": "035420.KS", "NAVER": "035420.KS",
     "현대차": "005380.KS", "기아": "000270.KS",
+    "한화": "000880.KS", "HANWHA": "000880.KS",
     "에코프로": "086520.KQ", "에코프로비엠": "247540.KQ",
     "포스코홀딩스": "005490.KS", "POSCO홀딩스": "005490.KS", "포홀": "005490.KS",
     "엔비디아": "NVDA", "애플": "AAPL", "테슬라": "TSLA", "마이크로소프트": "MSFT",
@@ -70,10 +71,23 @@ SUBSIDIARY_KEYWORD_MAP = {
 }
 
 def get_ticker_by_keyword(normalized_name: str):
-    if "HANWHA" in normalized_name and "ENGINE" in normalized_name:
-        return "082740.KS"
-    if "HANWHA" in normalized_name and ("손해" in normalized_name or "손보" in normalized_name) and "보험" in normalized_name:
-        return "000370.KS"
+    """
+    특정 키워드(예: ENGINE, 손해보험)가 명시적으로 포함된 경우에만 해당 계열사로 매핑합니다.
+    그렇지 않은 일반적인 '한화' 검색어는 지주사나 주요 법인으로 가도록 유도합니다.
+    """
+    # 한화 그룹 관련 정밀 분기
+    if "HANWHA" in normalized_name:
+        if "ENGINE" in normalized_name or "엔진" in normalized_name:
+            return "082740.KS"
+        if any(kw in normalized_name for kw in ["손해", "보험", "INSURANCE", "GENERAL"]):
+            return "000370.KS"
+        if any(kw in normalized_name for kw in ["에어로", "AERO", "SPACE"]):
+            return "012450.KS"
+        if any(kw in normalized_name for kw in ["솔루션", "SOLUTION"]):
+            return "009830.KS"
+        if any(kw in normalized_name for kw in ["오션", "OCEAN"]):
+            return "042660.KS"
+
     for keyword, ticker in SUBSIDIARY_KEYWORD_MAP.items():
         if keyword in normalized_name:
             return ticker
@@ -125,13 +139,14 @@ def resolve_ticker_with_gpt(user_input: str):
                         "4. RESPONSE FORMAT:\n"
                         "   - Output ONLY the raw ticker symbol. Absolutely NO explanations, NO quotes, NO markdown, NO spaces, NO trailing periods.\n\n"
 
-                        "5. GROUP AFFILIATE RULE:\n"
-                        "   - If the user input refers to a subsidiary, affiliate, or group brand name, map it to the specific listed entity where possible rather than the parent holding company.\n"
-                        "   - Example: 'Hanwha Engine' should resolve to '082740.KS' even though it is a Hanwha group affiliate.\n\n"
+                        "5. GROUP AFFILIATE VS HOLDING COMPANY:\n"
+                        "   - If the user input is generic (e.g., 'Hanwha', 'Samsung', 'Hanwha Company' in any language), ALWAYS prioritize the Parent Holding Company or the main representative entity (e.g., Hanwha -> '000880.KS', Samsung -> '005930.KS').\n"
+                        "   - Only map to a specific subsidiary (e.g., Hanwha Engine, Samsung SDI) if the input EXPLICITLY mentions the subsidiary's business area (Engine, Insurance, etc.).\n"
+                        "   - Example: 'شركة هانوا' (Hanwha Company) should resolve to '000880.KS' (Hanwha Corp), NOT an affiliate.\n\n"
 
                         "📋 [EXACT MULTI-LANGUAGE MAPPING EXAMPLES]\n"
-                        "- '더존비즈온' -> '012510.KS'\n"
-                        "- 'ISC' -> '095340.KQ'\n"
+                        "- '한화' / 'Hanwha' / 'شركة هانوا' -> '000880.KS'\n"
+                        "- '한화엔진' -> '082740.KS'\n"
                         "- '아이에스씨' -> '095340.KQ'\n"
                         "- '아이온큐' -> 'IONQ'\n"
                         "- '엔비디아' -> 'NVDA'\n"
