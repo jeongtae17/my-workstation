@@ -32,6 +32,9 @@ app.add_middleware(
 KOREAN_TICKER_MAP = {
     "코스피": "^KS11", "KOSPI": "^KS11",
     "코스닥": "^KQ11", "KOSDAQ": "^KQ11",
+    "나스닥": "^IXIC", "NASDAQ": "^IXIC", "나스닥종합": "^IXIC",
+    "S&P 500": "^GSPC", "S&P500": "^GSPC", "에스앤피500": "^GSPC",
+    "다우": "^DJI", "다우존스": "^DJI",
     "KODEX 200": "069500.KS", "KODEX200": "069500.KS",
     "TIGER 200": "102110.KS", "TIGER200": "102110.KS",
     "KODEX 레버리지": "122630.KS", "KODEX200레버리지": "122630.KS",
@@ -127,7 +130,7 @@ def resolve_ticker_with_gpt(user_input: str):
                         "   - Example: 'Hanwha Engine' should resolve to '082740.KS' even though it is a Hanwha group affiliate.\n\n"
 
                         "📋 [EXACT MULTI-LANGUAGE MAPPING EXAMPLES]\n"
-                        "- '더존비즈온' -> '012515.KS'\n"
+                        "- '더존비즈온' -> '012510.KS'\n"
                         "- 'ISC' -> '095340.KQ'\n"
                         "- '아이에스씨' -> '095340.KQ'\n"
                         "- '아이온큐' -> 'IONQ'\n"
