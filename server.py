@@ -103,6 +103,10 @@ async def analyze(ticker_query: str):
         signal, score = generate_signal(df)
         rsi = df["RSI"].iloc[-1]
         macd = df["MACD"].iloc[-1]
+
+        # MACD 강도 비율 계산 (MACD / 현재가 * 100)
+        macd_intensity = (macd / df["Close"].iloc[-1]) * 100
+
         prob = calculate_probability(score, rsi, macd, df)
         news = fetch_news(ticker, company.get("name", ""))
         financials = fetch_financials(ticker)
@@ -116,6 +120,7 @@ async def analyze(ticker_query: str):
             "score": score,
             "rsi": float(rsi),
             "macd": float(macd),
+            "macd_intensity": float(macd_intensity),
             "probability": prob,
             "financials": financials,
             "news": [{"title": n.title, "url": n.url} for n in news],
